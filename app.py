@@ -187,6 +187,12 @@ def format_pk_whatsapp(phone):
     return digits
 
 
+def safe_filename_part(value):
+    cleaned = "".join(ch if ch.isalnum() else "_" for ch in str(value or "").strip())
+    cleaned = "_".join(part for part in cleaned.split("_") if part)
+    return cleaned or "student"
+
+
 def create_payments_for_student(db, student_id, total_fee, installment_count, course, admission_date_str):
     installment_amount = round(total_fee / installment_count, 2)
     try:
@@ -677,7 +683,9 @@ def voucher_pdf(payment_id):
         abort(404)
 
     buffer = build_voucher_pdf(payment, student, dev_context(), COLLEGE_NAME)
-    filename = f"Voucher_{student['candidate_no'] or student['id']}_Inst{payment['installment_no']}.pdf"
+    student_name = safe_filename_part(student["name"])
+    candidate_no = safe_filename_part(student["candidate_no"] or student["id"])
+    filename = f"Voucher_{student_name}_{candidate_no}_Inst{payment['installment_no']}.pdf"
     return send_file(buffer, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 
