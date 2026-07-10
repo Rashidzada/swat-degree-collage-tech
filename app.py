@@ -24,6 +24,8 @@ DEVELOPER_TITLE = "Full Stack Developer"
 DEVELOPER_WHATSAPP = "923470983567"          # international format, no +
 DEVELOPER_WHATSAPP_DISPLAY = "0347-0983567"
 COLLEGE_NAME = "SWAT DEGREE COLLEGE OF TECHNOLOGY"
+COLLEGE_AFFILIATION = "Affiliated with University of Swat"
+COLLEGE_ADMIN_CONTACTS = ["0345 9550363", "0313 0400440"]
 
 # ----------------------------------------------------------------------
 # Database helpers
@@ -163,6 +165,8 @@ def dev_context():
         "whatsapp": DEVELOPER_WHATSAPP,
         "whatsapp_display": DEVELOPER_WHATSAPP_DISPLAY,
         "college": COLLEGE_NAME,
+        "affiliation": COLLEGE_AFFILIATION,
+        "admin_contacts": COLLEGE_ADMIN_CONTACTS,
     }
 
 
@@ -191,6 +195,40 @@ def create_payments_for_student(db, student_id, total_fee, installment_count, co
         base_date = date.today()
 
     for i in range(1, installment_count + 1):
+        due = base_date + timedelta(days=30 * (i - 1)) if i > 1 else base_date + timedelta(days=15)
+        id_card = course["id_card_fee"] if course and i == 1 else 0
+        dmc = course["dmc_fee"] if course and i == 1 else 0
+        exam = course["exam_fee"] if course and i == 1 else 0
+        fund = course["fund_fee"] if course and i == 1 else 0
+        db.execute(
+            """INSERT INTO payments
+               (student_id, installment_no, tuition_amount, id_card_fee, dmc_fee, exam_fee, fund_fee, due_date, paid)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+            (student_id, i, installment_amount, id_card, dmc, exam, fund, due.isoformat()),
+        )
+    db.commit()
+
+
+def rebuild_unpaid_payments_for_student(db, student_id, total_fee, installment_count, course, admission_date_str):
+    paid_rows = db.execute(
+        "SELECT installment_no FROM payments WHERE student_id = ? AND paid = 1",
+        (student_id,),
+    ).fetchall()
+    paid_installments = {row["installment_no"] for row in paid_rows}
+    if paid_installments:
+        installment_count = max(installment_count, max(paid_installments))
+
+    db.execute("DELETE FROM payments WHERE student_id = ? AND paid = 0", (student_id,))
+
+    installment_amount = round(total_fee / installment_count, 2)
+    try:
+        base_date = datetime.strptime(admission_date_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        base_date = date.today()
+
+    for i in range(1, installment_count + 1):
+        if i in paid_installments:
+            continue
         due = base_date + timedelta(days=30 * (i - 1)) if i > 1 else base_date + timedelta(days=15)
         id_card = course["id_card_fee"] if course and i == 1 else 0
         dmc = course["dmc_fee"] if course and i == 1 else 0
@@ -297,6 +335,32 @@ def delete_teacher(teacher_id):
     return redirect(url_for("teachers"))
 
 
+@app.route("/teachers/edit/<int:teacher_id>", methods=["GET", "POST"])
+@login_required
+def edit_teacher(teacher_id):
+    db = get_db()
+    teacher = db.execute("SELECT * FROM teachers WHERE id = ?", (teacher_id,)).fetchone()
+    if not teacher:
+        abort(404)
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        phone = request.form.get("phone", "").strip()
+        subject = request.form.get("subject", "").strip()
+        if not name:
+            flash("Teacher name is required.", "error")
+        else:
+            db.execute(
+                "UPDATE teachers SET name = ?, phone = ?, subject = ? WHERE id = ?",
+                (name, phone, subject, teacher_id),
+            )
+            db.commit()
+            flash("Teacher updated.", "success")
+            return redirect(url_for("teachers"))
+
+    return render_template("teacher_edit.html", teacher=teacher, dev=dev_context())
+
+
 # ----------------------------------------------------------------------
 # Courses
 # ----------------------------------------------------------------------
@@ -342,6 +406,41 @@ def delete_course(course_id):
     db.commit()
     flash("Course removed.", "success")
     return redirect(url_for("courses"))
+
+
+@app.route("/courses/edit/<int:course_id>", methods=["GET", "POST"])
+@login_required
+def edit_course(course_id):
+    db = get_db()
+    course = db.execute("SELECT * FROM courses WHERE id = ?", (course_id,)).fetchone()
+    if not course:
+        abort(404)
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        duration = request.form.get("duration", "").strip()
+        fee = float(request.form.get("fee") or 0)
+        id_card_fee = float(request.form.get("id_card_fee") or 0)
+        dmc_fee = float(request.form.get("dmc_fee") or 0)
+        exam_fee = float(request.form.get("exam_fee") or 0)
+        fund_fee = float(request.form.get("fund_fee") or 0)
+        teacher_id = request.form.get("teacher_id") or None
+        if not name:
+            flash("Course name is required.", "error")
+        else:
+            db.execute(
+                """UPDATE courses
+                   SET name = ?, duration = ?, fee = ?, id_card_fee = ?, dmc_fee = ?,
+                       exam_fee = ?, fund_fee = ?, teacher_id = ?
+                   WHERE id = ?""",
+                (name, duration, fee, id_card_fee, dmc_fee, exam_fee, fund_fee, teacher_id, course_id),
+            )
+            db.commit()
+            flash("Course updated. Existing students keep their current fee schedule unless edited separately.", "success")
+            return redirect(url_for("courses"))
+
+    teacher_rows = db.execute("SELECT * FROM teachers ORDER BY name").fetchall()
+    return render_template("course_edit.html", course=course, teachers=teacher_rows, dev=dev_context())
 
 
 # ----------------------------------------------------------------------
@@ -429,6 +528,77 @@ def delete_student(student_id):
     db.commit()
     flash("Student removed.", "success")
     return redirect(url_for("students"))
+
+
+@app.route("/students/edit/<int:student_id>", methods=["GET", "POST"])
+@login_required
+def edit_student(student_id):
+    db = get_db()
+    student = db.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+    if not student:
+        abort(404)
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        father_name = request.form.get("father_name", "").strip()
+        phone = request.form.get("phone", "").strip()
+        candidate_no = request.form.get("candidate_no", "").strip()
+        course_id = request.form.get("course_id") or None
+        teacher_id = request.form.get("teacher_id") or None
+        total_fee = float(request.form.get("total_fee") or 0)
+        installment_count = int(request.form.get("installment_count") or 1)
+        admission_date = request.form.get("admission_date") or date.today().isoformat()
+
+        if not name:
+            flash("Student name is required.", "error")
+            return redirect(url_for("edit_student", student_id=student_id))
+
+        schedule_changed = (
+            str(student["course_id"] or "") != str(course_id or "")
+            or float(student["total_fee"] or 0) != total_fee
+            or int(student["installment_count"] or 1) != installment_count
+            or (student["admission_date"] or "") != admission_date
+        )
+
+        paid_max = db.execute(
+            "SELECT MAX(installment_no) AS max_paid FROM payments WHERE student_id = ? AND paid = 1",
+            (student_id,),
+        ).fetchone()["max_paid"]
+        if paid_max and installment_count < paid_max:
+            installment_count = paid_max
+            flash(f"Installments kept at {paid_max} because paid voucher records already exist.", "error")
+
+        db.execute(
+            """UPDATE students
+               SET candidate_no = ?, name = ?, father_name = ?, phone = ?, course_id = ?,
+                   teacher_id = ?, total_fee = ?, installment_count = ?, admission_date = ?
+               WHERE id = ?""",
+            (candidate_no, name, father_name, phone, course_id, teacher_id,
+             total_fee, installment_count, admission_date, student_id),
+        )
+
+        if schedule_changed:
+            course = None
+            if course_id:
+                course = db.execute("SELECT * FROM courses WHERE id = ?", (course_id,)).fetchone()
+            rebuild_unpaid_payments_for_student(
+                db, student_id, total_fee, installment_count, course, admission_date
+            )
+        else:
+            db.commit()
+
+        flash("Student updated.", "success")
+        return redirect(url_for("view_student", student_id=student_id))
+
+    course_rows = db.execute("SELECT * FROM courses ORDER BY name").fetchall()
+    teacher_rows = db.execute("SELECT * FROM teachers ORDER BY name").fetchall()
+    return render_template(
+        "student_edit.html",
+        student=student,
+        courses=course_rows,
+        teachers=teacher_rows,
+        dev=dev_context(),
+    )
 
 
 @app.route("/payments/<int:payment_id>/mark_paid", methods=["POST"])

@@ -4,6 +4,7 @@
 <div class="page-header">
   <h1>{{ student.name }}</h1>
   <p class="muted">Candidate No: {{ student.candidate_no or '-' }} | Father: {{ student.father_name or '-' }}</p>
+  <a class="link-btn" href="{{ url_for('edit_student', student_id=student.id) }}">Edit Student</a>
 </div>
 
 <div class="grid-2">

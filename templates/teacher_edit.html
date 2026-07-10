@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Edit Teacher{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Edit Teacher</h1>
+  <p class="muted">Update teacher contact and specialization details.</p>
+</div>
+
+<div class="panel form-panel">
+  <form method="POST" class="stack-form">
+    <div class="form-group">
+      <label>Full Name</label>
+      <input type="text" name="name" value="{{ teacher.name }}" required>
+    </div>
+    <div class="form-group">
+      <label>Phone</label>
+      <input type="text" name="phone" value="{{ teacher.phone or '' }}">
+    </div>
+    <div class="form-group">
+      <label>Subject / Specialization</label>
+      <input type="text" name="subject" value="{{ teacher.subject or '' }}">
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Save Changes</button>
+      <a class="btn-secondary" href="{{ url_for('teachers') }}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

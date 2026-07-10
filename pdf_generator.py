@@ -21,43 +21,43 @@ def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy
     c.setLineWidth(1.2)
     c.rect(left, top - height, width, height)
 
-    cursor = top - 8 * mm
+    cursor = top - 7 * mm
 
     # Copy label (top right, small)
     c.setFont("Helvetica-Bold", 7)
     c.drawRightString(right - 4 * mm, top - 5 * mm, copy_label)
 
     # Header
-    c.setFont("Helvetica-Bold", 12)
+    c.setFont("Helvetica-Bold", 11)
     c.drawCentredString(left + width / 2, cursor, college_name)
-    cursor -= 5 * mm
+    cursor -= 4.5 * mm
     c.setFont("Helvetica", 7)
-    c.drawCentredString(left + width / 2, cursor, "(Approved by HEC / Affiliated with University)")
+    c.drawCentredString(left + width / 2, cursor, f"(Approved by HEC / {dev['affiliation']})")
     cursor -= 3 * mm
     c.setLineWidth(0.8)
     c.line(left + 4 * mm, cursor, right - 4 * mm, cursor)
-    cursor -= 5 * mm
+    cursor -= 4.5 * mm
 
     # Meta row: date / candidate no
     c.setFont("Helvetica", 8)
     today_str = payment["due_date"] or ""
     c.drawString(left + 4 * mm, cursor, f"Date: {payment['due_date'] or '-'}")
     c.drawRightString(right - 4 * mm, cursor, f"Candidate No: {student['candidate_no'] or '-'}")
-    cursor -= 5 * mm
+    cursor -= 4.5 * mm
 
     # Student info
     c.setFont("Helvetica-Bold", 8)
     c.drawString(left + 4 * mm, cursor, f"Student Name: {student['name']}")
-    cursor -= 4.5 * mm
+    cursor -= 4 * mm
     c.drawString(left + 4 * mm, cursor, f"Father Name: {student['father_name'] or '-'}")
-    cursor -= 4.5 * mm
+    cursor -= 4 * mm
     course_line = f"Program: {student['course_name'] or '-'}   |   Duration: {student['course_duration'] or '-'}"
     c.drawString(left + 4 * mm, cursor, course_line)
-    cursor -= 6 * mm
+    cursor -= 5 * mm
 
     # Table
     col_widths = [12 * mm, width - 12 * mm - 30 * mm - 8 * mm, 30 * mm]
-    row_h = 6 * mm
+    row_h = 5.4 * mm
     table_top = cursor
     table_left = left + 4 * mm
 
@@ -96,7 +96,7 @@ def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy
             xpos += cw
         y_cursor -= row_h
 
-    cursor = y_cursor - 5 * mm
+    cursor = y_cursor - 4 * mm
 
     # Footer info
     c.setFont("Helvetica", 7.5)
@@ -105,7 +105,7 @@ def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy
                  f"Installment: {payment['installment_no']} of {student['installment_count']}   "
                  f"Status: {paid_status}")
     c.drawRightString(right - 4 * mm, cursor, f"Due Date: {payment['due_date'] or '-'}")
-    cursor -= 8 * mm
+    cursor -= 7 * mm
 
     # Signature area
     c.setLineWidth(0.6)
@@ -115,11 +115,16 @@ def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy
     c.setFont("Helvetica", 6.5)
     c.drawCentredString(left + 23 * mm, cursor, "Student Sign")
     c.drawCentredString(right - 23 * mm, cursor, "Accountant Stamp")
-    cursor -= 5 * mm
+    cursor -= 4 * mm
 
     c.setFont("Helvetica-Bold", 6.5)
     c.drawCentredString(left + width / 2, cursor, "FEE ONCE PAID WILL NOT BE RETURNED IN ANY CASE")
-    cursor -= 4 * mm
+    cursor -= 3.5 * mm
+
+    c.setFont("Helvetica-Bold", 6.5)
+    admin_contacts = " / ".join(dev["admin_contacts"])
+    c.drawCentredString(left + width / 2, cursor, f"College Admin Contact: {admin_contacts}")
+    cursor -= 3.5 * mm
 
     c.setFont("Helvetica-Oblique", 6.5)
     c.drawCentredString(

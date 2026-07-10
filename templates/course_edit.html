@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Edit Course{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Edit Course</h1>
+  <p class="muted">Update course, teacher, and fee structure.</p>
+</div>
+
+<div class="panel form-panel">
+  <form method="POST" class="stack-form">
+    <div class="form-group">
+      <label>Course Name</label>
+      <input type="text" name="name" value="{{ course.name }}" required>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Duration</label>
+        <input type="text" name="duration" value="{{ course.duration or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Teacher</label>
+        <select name="teacher_id">
+          <option value="">-- Unassigned --</option>
+          {% for t in teachers %}
+          <option value="{{ t.id }}" {{ 'selected' if course.teacher_id == t.id else '' }}>{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Total Course Fee (PKR)</label>
+      <input type="number" name="fee" value="{{ '%.0f'|format(course.fee) }}" step="100" required>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>ID Card Fee</label><input type="number" name="id_card_fee" value="{{ '%.0f'|format(course.id_card_fee) }}"></div>
+      <div class="form-group"><label>DMC Fee</label><input type="number" name="dmc_fee" value="{{ '%.0f'|format(course.dmc_fee) }}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Exam Fee</label><input type="number" name="exam_fee" value="{{ '%.0f'|format(course.exam_fee) }}"></div>
+      <div class="form-group"><label>Fund Fee</label><input type="number" name="fund_fee" value="{{ '%.0f'|format(course.fund_fee) }}"></div>
+    </div>
+    <p class="muted small">Changes here affect new students. Edit a student to refresh that student's unpaid vouchers.</p>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Save Changes</button>
+      <a class="btn-secondary" href="{{ url_for('courses') }}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
