@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ student.name }} — Student Detail{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ student.name }}</h1>
+  <p class="muted">Candidate No: {{ student.candidate_no or '-' }} | Father: {{ student.father_name or '-' }}</p>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header"><h2>Student Info</h2></div>
+    <table class="info-table">
+      <tr><td>Course</td><td>{{ student.course_name or '-' }} ({{ student.course_duration or '-' }})</td></tr>
+      <tr><td>Teacher</td><td>{{ student.teacher_name or '-' }}</td></tr>
+      <tr><td>Phone</td><td>{{ student.phone or '-' }}</td></tr>
+      <tr><td>Total Fee</td><td>Rs. {{ "%.0f"|format(student.total_fee) }}</td></tr>
+      <tr><td>Installments</td><td>{{ student.installment_count }}</td></tr>
+      <tr><td>Admission Date</td><td>{{ student.admission_date }}</td></tr>
+    </table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h2>Installment Schedule</h2></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Amount</th><th>Due Date</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for p in payments %}
+          <tr>
+            <td>{{ p.installment_no }}</td>
+            <td>Rs. {{ "%.0f"|format(p.tuition_amount + p.id_card_fee + p.dmc_fee + p.exam_fee + p.fund_fee) }}</td>
+            <td>{{ p.due_date }}</td>
+            <td>
+              {% if p.paid %}
+                <span class="badge badge-green">Paid on {{ p.paid_date }}</span>
+              {% else %}
+                <span class="badge badge-red">Unpaid</span>
+              {% endif %}
+            </td>
+            <td>
+              <a class="link-btn" href="{{ url_for('voucher', payment_id=p.id) }}">Slip</a>
+              {% if not p.paid %}
+              <form method="POST" action="{{ url_for('mark_paid', payment_id=p.id) }}" style="display:inline;">
+                <button type="submit" class="btn-success-sm">Mark Paid</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

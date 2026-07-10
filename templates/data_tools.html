@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Import / Export{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Excel Import / Export</h1>
+  <p class="muted">Back up all your data to Excel, or bulk-import teachers, courses and students.</p>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header"><h2>⬇️ Export to Excel</h2></div>
+    <p>Downloads one workbook with 4 sheets: <b>Teachers</b>, <b>Courses</b>, <b>Students</b> and <b>Payments</b>
+       (includes every installment and its paid/unpaid status).</p>
+    <a class="btn-primary full" href="{{ url_for('export_excel') }}">⬇️ Download Excel Backup</a>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h2>⬆️ Import from Excel</h2></div>
+    <p>Upload an <code>.xlsx</code> file in the same format as the export (sheets named
+       <b>Teachers</b>, <b>Courses</b>, <b>Students</b>). Matching rows are added as
+       <b>new</b> records — a fresh fee schedule is generated automatically for every imported student.</p>
+    <form method="POST" action="{{ url_for('import_excel') }}" enctype="multipart/form-data" class="stack-form">
+      <div class="form-group">
+        <label>Excel File (.xlsx)</label>
+        <input type="file" name="excel_file" accept=".xlsx" required>
+      </div>
+      <button type="submit" class="btn-primary full">⬆️ Import Data</button>
+    </form>
+    <p class="muted small">Tip: export first to get a correctly formatted template, edit it, then re-import.</p>
+  </div>
+</div>
+{% endblock %}

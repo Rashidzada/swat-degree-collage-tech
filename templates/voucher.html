@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Voucher — {{ student.name }}{% endblock %}
+{% block head %}
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    .sidebar { display: none !important; }
+    .main-content { padding: 0 !important; }
+    .app-shell { display: block !important; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-header no-print">
+  <h1>Fee Voucher</h1>
+  <p class="muted">Installment {{ payment.installment_no }} of {{ student.installment_count }} — {{ student.name }}</p>
+</div>
+
+<div class="voucher-actions no-print">
+  <button class="btn-primary" onclick="window.print()">🖨️ Print (2 Copies)</button>
+  <a class="btn-primary" href="{{ url_for('voucher_pdf', payment_id=payment.id) }}">⬇️ Download PDF</a>
+  {% if wa_number %}
+  <a class="btn-whatsapp" target="_blank" href="https://wa.me/{{ wa_number }}?text={{ wa_message|urlencode }}">💬 Send to Student's WhatsApp</a>
+  {% else %}
+  <span class="muted small">Add student's phone number to enable WhatsApp share.</span>
+  {% endif %}
+  {% if not payment.paid %}
+  <form method="POST" action="{{ url_for('mark_paid', payment_id=payment.id) }}" style="display:inline;">
+    <button type="submit" class="btn-success">✅ Mark Installment Paid</button>
+  </form>
+  {% endif %}
+  <a class="btn-secondary" href="{{ url_for('view_student', student_id=student.id) }}">← Back to Student</a>
+</div>
+
+<p class="muted small no-print" style="margin-top:-6px;">
+  Note: WhatsApp's free link opens a chat with the message pre-filled — please attach the downloaded PDF manually in the chat
+  (automatic file-attach requires a paid WhatsApp Business API).
+</p>
+
+<div class="slip-sheet">
+  {% for copy_label in ["OFFICE COPY", "STUDENT COPY"] %}
+  <div class="slip">
+    <div class="slip-copy-label">{{ copy_label }}</div>
+    <div class="slip-header">
+      <h2>{{ dev.college }}</h2>
+      <p>(Approved by HEC / Affiliated with University)</p>
+    </div>
+    <div class="slip-meta">
+      <span><b>Date:</b> {{ today }}</span>
+      <span><b>Candidate No:</b> {{ student.candidate_no or '-' }}</span>
+    </div>
+    <div class="slip-info">
+      <div><b>Student Name:</b> {{ student.name }}</div>
+      <div><b>Father Name:</b> {{ student.father_name or '-' }}</div>
+      <div><b>Program:</b> {{ student.course_name or '-' }} | <b>Duration:</b> {{ student.course_duration or '-' }}</div>
+    </div>
+    <table class="voucher-table">
+      <thead><tr><th>S.No</th><th>Particulars</th><th>Amount (Rs.)</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td class="left">ID Card Fee</td><td>{{ "%.0f"|format(payment.id_card_fee) if payment.id_card_fee else '---' }}</td></tr>
+        <tr><td>2</td><td class="left">Tuition Fee (Installment {{ payment.installment_no }})</td><td>{{ "%.0f"|format(payment.tuition_amount) }}</td></tr>
+        <tr><td>3</td><td class="left">DMC</td><td>{{ "%.0f"|format(payment.dmc_fee) if payment.dmc_fee else '---' }}</td></tr>
+        <tr><td>4</td><td class="left">Exam Fee</td><td>{{ "%.0f"|format(payment.exam_fee) if payment.exam_fee else '---' }}</td></tr>
+        <tr><td>5</td><td class="left">Fund Fee</td><td>{{ "%.0f"|format(payment.fund_fee) if payment.fund_fee else '---' }}</td></tr>
+        <tr class="total-row"><td>6</td><td class="left">Total</td><td>{{ "%.0f"|format(total) }}</td></tr>
+      </tbody>
+    </table>
+    <div class="slip-footer">
+      <div><b>Installment:</b> {{ payment.installment_no }} of {{ student.installment_count }} &nbsp; | &nbsp;
+           <b>Status:</b> {{ "PAID" if payment.paid else "UNPAID" }} &nbsp; | &nbsp;
+           <b>Due Date:</b> {{ payment.due_date }}</div>
+      <div class="signature-area">
+        <div class="signature-line">Student Sign</div>
+        <div class="signature-line">Accountant Stamp</div>
+      </div>
+      <div class="fine-print">FEE ONCE PAID WILL NOT BE RETURNED IN ANY CASE</div>
+      <div class="dev-print-note">Need software like this? Contact {{ dev.name }} ({{ dev.title }}) — WhatsApp: {{ dev.whatsapp_display }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

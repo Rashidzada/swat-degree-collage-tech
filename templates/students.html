@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Students{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Students</h1>
+  <p class="muted">Enroll new students and generate their installment schedule automatically.</p>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header"><h2>Enroll New Student</h2></div>
+    <form method="POST" class="stack-form">
+      <div class="form-row">
+        <div class="form-group"><label>Student Name</label><input type="text" name="name" placeholder="John Doe" required></div>
+        <div class="form-group"><label>Father Name</label><input type="text" name="father_name" placeholder="Mr. Doe"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Phone (WhatsApp)</label><input type="text" name="phone" placeholder="03001234567"></div>
+        <div class="form-group"><label>Candidate No.</label><input type="text" name="candidate_no" placeholder="C-2026-01"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Course</label>
+          <select name="course_id" id="courseSelect">
+            <option value="">-- Select Course --</option>
+            {% for c in courses %}<option value="{{ c.id }}" data-fee="{{ c.fee }}">{{ c.name }} ({{ c.duration }})</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Teacher</label>
+          <select name="teacher_id">
+            <option value="">-- Select Teacher --</option>
+            {% for t in teachers %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Total Fee (PKR)</label><input type="number" name="total_fee" id="totalFeeInput" value="12000" step="100" required></div>
+        <div class="form-group">
+          <label>Installments</label>
+          <select name="installment_count">
+            <option value="1">Full Payment</option>
+            <option value="2" selected>2 Installments</option>
+            <option value="3">3 Installments</option>
+            <option value="4">4 Installments</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Admission Date</label>
+        <input type="date" name="admission_date" value="{{ today }}">
+      </div>
+      <button type="submit" class="btn-primary full">Enroll Student</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h2>All Students ({{ students|length }})</h2></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Course</th><th>Teacher</th><th>Dues</th><th></th></tr></thead>
+        <tbody>
+          {% for s in students %}
+          <tr>
+            <td>{{ s.name }} <span class="muted small">#{{ s.candidate_no or '-' }}</span></td>
+            <td>{{ s.course_name or '-' }}</td>
+            <td>{{ s.teacher_name or '-' }}</td>
+            <td>
+              {% if s.pending_installments > 0 %}
+                <span class="badge badge-red">{{ s.pending_installments }} pending</span>
+              {% else %}
+                <span class="badge badge-green">Cleared</span>
+              {% endif %}
+            </td>
+            <td>
+              <a class="link-btn" href="{{ url_for('view_student', student_id=s.id) }}">View</a>
+              <form method="POST" action="{{ url_for('delete_student', student_id=s.id) }}" onsubmit="return confirm('Remove this student and all records?');" style="display:inline;">
+                <button type="submit" class="btn-danger-sm">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">No students enrolled yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const courseSelect = document.getElementById('courseSelect');
+  const totalFeeInput = document.getElementById('totalFeeInput');
+  if (courseSelect) {
+    courseSelect.addEventListener('change', function() {
+      const opt = this.options[this.selectedIndex];
+      const fee = opt.getAttribute('data-fee');
+      if (fee) totalFeeInput.value = fee;
+    });
+  }
+</script>
+{% endblock %}

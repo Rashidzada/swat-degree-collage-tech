@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}College Fee System{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+{% if session.get('admin_id') %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <div>
+        <div class="brand-title">{{ dev.college }}</div>
+        <div class="brand-sub">Fee Voucher System</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint=='dashboard' }}">📊 Dashboard</a>
+      <a href="{{ url_for('students') }}" class="{{ 'active' if request.endpoint in ['students','view_student'] }}">🎓 Students</a>
+      <a href="{{ url_for('courses') }}" class="{{ 'active' if request.endpoint=='courses' }}">📘 Courses</a>
+      <a href="{{ url_for('teachers') }}" class="{{ 'active' if request.endpoint=='teachers' }}">👩‍🏫 Teachers</a>
+      <a href="{{ url_for('data_tools') }}" class="{{ 'active' if request.endpoint=='data_tools' }}">📥 Import / Export</a>
+      <a href="{{ url_for('settings') }}" class="{{ 'active' if request.endpoint=='settings' }}">⚙️ Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="dev-card">
+        <div class="dev-card-title">Need software like this?</div>
+        <div class="dev-card-name">{{ dev.name }} — {{ dev.title }}</div>
+        <a class="dev-whatsapp-btn" target="_blank"
+           href="https://wa.me/{{ dev.whatsapp }}?text=Hi%2C%20I%20need%20a%20software%20like%20the%20College%20Fee%20Voucher%20System">
+          💬 WhatsApp {{ dev.whatsapp_display }}
+        </a>
+      </div>
+      <a href="{{ url_for('logout') }}" class="logout-link">🚪 Logout ({{ session.get('admin_username') }})</a>
+    </div>
+  </aside>
+  <main class="main-content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-wrap">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+  {% block content_noauth %}{% endblock %}
+{% endif %}
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

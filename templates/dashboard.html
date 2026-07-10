@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <p class="muted">Overview of your college's teachers, courses, students and dues.</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card stat-blue">
+    <div class="stat-icon">🎓</div>
+    <div>
+      <div class="stat-value">{{ total_students }}</div>
+      <div class="stat-label">Students</div>
+    </div>
+  </div>
+  <div class="stat-card stat-purple">
+    <div class="stat-icon">👩‍🏫</div>
+    <div>
+      <div class="stat-value">{{ total_teachers }}</div>
+      <div class="stat-label">Teachers</div>
+    </div>
+  </div>
+  <div class="stat-card stat-orange">
+    <div class="stat-icon">📘</div>
+    <div>
+      <div class="stat-value">{{ total_courses }}</div>
+      <div class="stat-label">Courses</div>
+    </div>
+  </div>
+  <div class="stat-card stat-green">
+    <div class="stat-icon">💰</div>
+    <div>
+      <div class="stat-value">Rs. {{ "%.0f"|format(collected) }}</div>
+      <div class="stat-label">Collected</div>
+    </div>
+  </div>
+  <div class="stat-card stat-red">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-value">Rs. {{ "%.0f"|format(pending) }}</div>
+      <div class="stat-label">Pending Dues</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Pending Dues</h2>
+      <a href="{{ url_for('students') }}" class="link-btn">+ Enroll Student</a>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Student</th><th>Course</th><th>Installment</th><th>Due Date</th><th>Amount</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for d in dues %}
+          <tr class="{{ 'overdue' if d.due_date < today else '' }}">
+            <td>{{ d.student_name }} <span class="muted small">#{{ d.candidate_no or '-' }}</span></td>
+            <td>{{ d.course_name or '-' }}</td>
+            <td>{{ d.installment_no }}</td>
+            <td>{{ d.due_date }} {% if d.due_date < today %}<span class="badge badge-red">Overdue</span>{% endif %}</td>
+            <td>Rs. {{ "%.0f"|format(d.tuition_amount + d.id_card_fee + d.dmc_fee + d.exam_fee + d.fund_fee) }}</td>
+            <td><a class="link-btn" href="{{ url_for('voucher', payment_id=d.id) }}">View Slip</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted">No pending dues 🎉</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Courses Overview</h2>
+      <a href="{{ url_for('courses') }}" class="link-btn">+ Add Course</a>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Course</th><th>Teacher</th><th>Duration</th><th>Fee</th><th>Students</th></tr>
+        </thead>
+        <tbody>
+          {% for c in courses %}
+          <tr>
+            <td>{{ c.name }}</td>
+            <td>{{ c.teacher_name or '-' }}</td>
+            <td>{{ c.duration or '-' }}</td>
+            <td>Rs. {{ "%.0f"|format(c.fee) }}</td>
+            <td>{{ c.student_count }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">No courses yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
