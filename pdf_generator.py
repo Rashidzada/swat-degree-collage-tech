@@ -164,3 +164,138 @@ def build_voucher_pdf(payment, student, dev, college_name, student_total_due=0):
     c.save()
     buffer.seek(0)
     return buffer
+
+
+def _get_row_value(row, key, default=""):
+    try:
+        if isinstance(row, dict):
+            return row.get(key, default)
+        return row[key] if row[key] is not None else default
+    except Exception:
+        return default
+
+
+def build_clearance_pdf(student, payments, total_payable, total_paid, total_due, dev, college_name):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    page_w, page_h = A4
+    margin = 18 * mm
+    y = page_h - margin
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(page_w / 2, y, college_name)
+    y -= 8 * mm
+
+    c.setFont("Helvetica", 9)
+    affiliation = dev.get("affiliation") or ""
+    c.drawCentredString(page_w / 2, y, f"{affiliation}")
+    y -= 6 * mm
+    c.line(margin, y, page_w - margin, y)
+    y -= 8 * mm
+
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margin, y, "Fee Clearance Slip")
+    c.setFont("Helvetica", 9)
+    status = "CLEARED" if float(total_due or 0) <= 0 else "DUES REMAINING"
+    c.drawRightString(page_w - margin, y, f"Status: {status}")
+    y -= 10 * mm
+
+    student_info = [
+        ("Student Name", _get_row_value(student, "name", "-")),
+        ("Candidate No", _get_row_value(student, "candidate_no", "-")),
+        ("Father Name", _get_row_value(student, "father_name", "-")),
+        ("Program", _get_row_value(student, "course_name", "-")),
+        ("Duration", _get_row_value(student, "course_duration", "-")),
+        ("Teacher", _get_row_value(student, "teacher_name", "-")),
+    ]
+    c.setFont("Helvetica", 8.5)
+    for label, value in student_info:
+        c.drawString(margin, y, f"{label}: {value}")
+        y -= 5.5 * mm
+
+    y -= 2 * mm
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(margin, y, "Payment Summary")
+    y -= 6 * mm
+    c.setFont("Helvetica", 8.5)
+    c.drawString(margin, y, f"Total Payable: PKR {float(total_payable or 0):.0f}")
+    c.drawString(page_w / 2 + 10 * mm, y, f"Total Paid: PKR {float(total_paid or 0):.0f}")
+    c.drawRightString(page_w - margin, y, f"Total Due: PKR {float(total_due or 0):.0f}")
+    y -= 10 * mm
+
+    # Table header
+    col_widths = [18 * mm, 22 * mm, 18 * mm, 18 * mm, 18 * mm, 18 * mm, 18 * mm, 20 * mm]
+    table_x = margin
+    row_h = 7 * mm
+    c.setLineWidth(0.6)
+    c.setFont("Helvetica-Bold", 8)
+
+    headers = ["Inst", "Due Date", "Tuition", "ID Card", "DMC", "Exam", "Fund", "Remaining"]
+    x = table_x
+    for hdr, width in zip(headers, col_widths):
+        c.rect(x, y - row_h, width, row_h, stroke=1, fill=1)
+        c.setFillColor(colors.black)
+        c.drawCentredString(x + width / 2, y - 5 * mm, hdr)
+        x += width
+    y -= row_h
+
+    c.setFont("Helvetica", 8)
+    for payment in payments:
+        if y < margin + row_h * 3:
+            c.showPage()
+            y = page_h - margin
+            c.setFont("Helvetica-Bold", 8)
+            x = table_x
+            for hdr, width in zip(headers, col_widths):
+                c.rect(x, y - row_h, width, row_h, stroke=1, fill=1)
+                c.setFillColor(colors.black)
+                c.drawCentredString(x + width / 2, y - 5 * mm, hdr)
+                x += width
+            y -= row_h
+            c.setFont("Helvetica", 8)
+
+        tuition = float(_get_row_value(payment, "tuition_amount", 0) or 0)
+        id_card = float(_get_row_value(payment, "id_card_fee", 0) or 0)
+        dmc = float(_get_row_value(payment, "dmc_fee", 0) or 0)
+        exam = float(_get_row_value(payment, "exam_fee", 0) or 0)
+        fund = float(_get_row_value(payment, "fund_fee", 0) or 0)
+        paid = float(_get_row_value(payment, "paid_amount", 0) or 0)
+        total = tuition + id_card + dmc + exam + fund
+        remaining = max(total - paid, 0)
+        row_values = [
+            str(_get_row_value(payment, "installment_no", "-")),
+            _get_row_value(payment, "due_date", "-"),
+            f"{tuition:.0f}",
+            f"{id_card:.0f}",
+            f"{dmc:.0f}",
+            f"{exam:.0f}",
+            f"{fund:.0f}",
+            f"{remaining:.0f}",
+        ]
+        x = table_x
+        for text, width in zip(row_values, col_widths):
+            c.rect(x, y - row_h, width, row_h, stroke=1, fill=0)
+            c.drawCentredString(x + width / 2, y - 5 * mm, text)
+            x += width
+        y -= row_h
+
+    y -= 10 * mm
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(margin, y, "Notes:")
+    y -= 5 * mm
+    c.setFont("Helvetica", 7.5)
+    c.drawString(margin, y, "This document is issued by the college for clearance verification purposes only.")
+    y -= 5.5 * mm
+    c.drawString(margin, y, "Please keep this slip safe and present it at the college office if requested.")
+    y -= 12 * mm
+
+    c.setFont("Helvetica", 7)
+    c.drawString(margin, y, f"Generated by: {dev.get('name') or '-'}")
+    c.drawString(page_w / 2, y, f"Contact: {dev.get('whatsapp_display') or dev.get('whatsapp') or '-'}")
+    y -= 5.5 * mm
+    c.drawString(margin, y, f"College Contact: {', '.join(dev.get('admin_contacts') or [])}")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer

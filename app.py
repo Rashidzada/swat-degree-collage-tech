@@ -229,6 +229,25 @@ def payment_remaining(payment):
     return max(payment_total(payment) - float(payment["paid_amount"] or 0), 0)
 
 
+def get_student_payment_rows(db, student_id):
+    return db.execute(
+        f"""SELECT *,
+                  {PAYMENT_TOTAL_P_SQL} AS payment_total,
+                  {PAYMENT_REMAINING_P_SQL} AS remaining_amount
+           FROM payments p
+           WHERE student_id = ?
+           ORDER BY installment_no""",
+        (student_id,),
+    ).fetchall()
+
+
+def summarize_payments(payments):
+    total_payable = sum(float(p["payment_total"] or 0) for p in payments)
+    total_paid = sum(float(p["paid_amount"] or 0) for p in payments)
+    total_due = sum(float(p["remaining_amount"] or 0) for p in payments)
+    return total_payable, total_paid, total_due
+
+
 def create_payments_for_student(db, student_id, total_fee, installment_count, course, admission_date_str):
     installment_amount = round(total_fee / installment_count, 2)
     try:
@@ -594,25 +613,100 @@ def view_student(student_id):
     ).fetchone()
     if not student:
         abort(404)
-    payments = db.execute(
-        f"""SELECT *,
-                  {PAYMENT_TOTAL_P_SQL} AS payment_total,
-                  {PAYMENT_REMAINING_P_SQL} AS remaining_amount
-           FROM payments p
-           WHERE student_id = ?
-           ORDER BY installment_no""",
-        (student_id,),
-    ).fetchall()
-    total_paid = sum(float(p["paid_amount"] or 0) for p in payments)
-    total_due = sum(float(p["remaining_amount"] or 0) for p in payments)
+    payments = get_student_payment_rows(db, student_id)
+    total_payable, total_paid, total_due = summarize_payments(payments)
     return render_template(
         "student_view.html",
         student=student,
         payments=payments,
+        total_payable=total_payable,
         total_paid=total_paid,
         total_due=total_due,
         dev=dev_context(),
     )
+
+
+@app.route("/students/<int:student_id>/clearance")
+@login_required
+def student_clearance(student_id):
+    db = get_db()
+    student = db.execute(
+        """SELECT s.*, c.name AS course_name, c.duration AS course_duration, t.name AS teacher_name
+           FROM students s
+           LEFT JOIN courses c ON c.id = s.course_id
+           LEFT JOIN teachers t ON t.id = s.teacher_id
+           WHERE s.id = ?""",
+        (student_id,),
+    ).fetchone()
+    if not student:
+        abort(404)
+
+    payments = get_student_payment_rows(db, student_id)
+    total_payable, total_paid, total_due = summarize_payments(payments)
+    wa_number = format_pk_whatsapp(student["phone"])
+    history_lines = "\n".join(
+        f"Installment {p['installment_no']}: Payable PKR {float(p['payment_total'] or 0):.0f}, "
+        f"Paid PKR {float(p['paid_amount'] or 0):.0f}, "
+        f"Remaining PKR {float(p['remaining_amount'] or 0):.0f}"
+        for p in payments
+    )
+    wa_message = (
+        f"Fee Clearance Slip - {COLLEGE_NAME}\n"
+        f"Student: {student['name']}\n"
+        f"Candidate No: {student['candidate_no'] or '-'}\n"
+        f"Program: {student['course_name'] or '-'}\n"
+        f"Total payable: PKR {total_payable:.0f}\n"
+        f"Total paid: PKR {total_paid:.0f}\n"
+        f"Remaining dues: PKR {total_due:.0f}\n"
+        f"Status: {'CLEARED' if total_due <= 0 else 'DUES REMAINING'}\n\n"
+        f"Payment History:\n{history_lines}"
+    )
+    return render_template(
+        "clearance.html",
+        student=student,
+        payments=payments,
+        total_payable=total_payable,
+        total_paid=total_paid,
+        total_due=total_due,
+        wa_number=wa_number,
+        wa_message=wa_message,
+        today=date.today().strftime("%d/%m/%Y"),
+        dev=dev_context(),
+    )
+
+
+@app.route("/students/<int:student_id>/clearance/pdf")
+@login_required
+def student_clearance_pdf(student_id):
+    from pdf_generator import build_clearance_pdf
+
+    db = get_db()
+    student = db.execute(
+        """SELECT s.*, c.name AS course_name, c.duration AS course_duration, t.name AS teacher_name
+           FROM students s
+           LEFT JOIN courses c ON c.id = s.course_id
+           LEFT JOIN teachers t ON t.id = s.teacher_id
+           WHERE s.id = ?""",
+        (student_id,),
+    ).fetchone()
+    if not student:
+        abort(404)
+
+    payments = get_student_payment_rows(db, student_id)
+    total_payable, total_paid, total_due = summarize_payments(payments)
+    buffer = build_clearance_pdf(
+        student,
+        payments,
+        total_payable,
+        total_paid,
+        total_due,
+        dev_context(),
+        COLLEGE_NAME,
+    )
+    student_name = safe_filename_part(student["name"])
+    candidate_no = safe_filename_part(student["candidate_no"] or student["id"])
+    filename = f"Clearance_{student_name}_{candidate_no}.pdf"
+    return send_file(buffer, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 
 @app.route("/students/delete/<int:student_id>", methods=["POST"])
