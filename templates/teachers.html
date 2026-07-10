@@ -30,7 +30,7 @@
     <div class="panel-header"><h2>All Teachers ({{ teachers|length }})</h2></div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Name</th><th>Phone</th><th>Subject</th><th>Courses</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Subject</th><th>Courses</th><th>Dues</th><th></th></tr></thead>
         <tbody>
           {% for t in teachers %}
           <tr>
@@ -39,6 +39,13 @@
             <td>{{ t.subject or '-' }}</td>
             <td>{{ t.course_count }}</td>
             <td>
+              {% if t.dues_amount > 0 %}
+                <a class="link-btn" href="{{ url_for('teacher_dues', teacher_id=t.id) }}">Rs. {{ "%.0f"|format(t.dues_amount) }}</a>
+              {% else %}
+                <span class="badge badge-green">Cleared</span>
+              {% endif %}
+            </td>
+            <td>
               <a class="link-btn" href="{{ url_for('edit_teacher', teacher_id=t.id) }}">Edit</a>
               <form method="POST" action="{{ url_for('delete_teacher', teacher_id=t.id) }}" onsubmit="return confirm('Remove this teacher?');">
                 <button type="submit" class="btn-danger-sm">Delete</button>
@@ -46,7 +53,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="5" class="muted">No teachers added yet.</td></tr>
+          <tr><td colspan="6" class="muted">No teachers added yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

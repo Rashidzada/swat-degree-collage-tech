@@ -68,6 +68,7 @@
             <td>
               {% if s.pending_installments > 0 %}
                 <span class="badge badge-red">{{ s.pending_installments }} pending</span>
+                <div class="muted small">Rs. {{ "%.0f"|format(s.dues_amount) }}</div>
               {% else %}
                 <span class="badge badge-green">Cleared</span>
               {% endif %}

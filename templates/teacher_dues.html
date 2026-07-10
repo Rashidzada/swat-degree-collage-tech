@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Teacher Dues{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ teacher.name }} Dues</h1>
+  <p class="muted">Students assigned to this teacher with remaining fee balances.</p>
+  <a class="link-btn" href="{{ url_for('teachers') }}">Back to Teachers</a>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <h2>Total Remaining: Rs. {{ "%.0f"|format(total_dues) }}</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Student</th><th>Course</th><th>Installment</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Due Date</th><th></th></tr></thead>
+      <tbody>
+        {% for d in dues %}
+        <tr>
+          <td>{{ d.student_name }} <span class="muted small">#{{ d.candidate_no or '-' }}</span></td>
+          <td>{{ d.course_name or '-' }}</td>
+          <td>{{ d.installment_no }}</td>
+          <td>Rs. {{ "%.0f"|format(d.payment_total) }}</td>
+          <td>Rs. {{ "%.0f"|format(d.paid_amount) }}</td>
+          <td><b>Rs. {{ "%.0f"|format(d.remaining_amount) }}</b></td>
+          <td>{{ d.due_date }}</td>
+          <td><a class="link-btn" href="{{ url_for('voucher', payment_id=d.id) }}">Slip</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="muted">No dues for this teacher.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

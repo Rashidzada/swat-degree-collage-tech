@@ -309,6 +309,19 @@ a { color: inherit; text-decoration: none; }
 }
 .badge-red { background: #fde9ea; color: #b0242a; }
 .badge-green { background: #e6f7ee; color: #147a4d; }
+.badge-orange { background: #fff0df; color: #a95715; }
+.inline-pay-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.inline-pay-form input {
+  width: 92px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
 
 /* ---------- Login page ---------- */
 .login-page {

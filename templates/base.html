@@ -22,7 +22,7 @@
       <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint=='dashboard' }}">📊 Dashboard</a>
       <a href="{{ url_for('students') }}" class="{{ 'active' if request.endpoint in ['students','view_student','edit_student'] }}">🎓 Students</a>
       <a href="{{ url_for('courses') }}" class="{{ 'active' if request.endpoint in ['courses','edit_course'] }}">📘 Courses</a>
-      <a href="{{ url_for('teachers') }}" class="{{ 'active' if request.endpoint in ['teachers','edit_teacher'] }}">👩‍🏫 Teachers</a>
+      <a href="{{ url_for('teachers') }}" class="{{ 'active' if request.endpoint in ['teachers','edit_teacher','teacher_dues'] }}">👩‍🏫 Teachers</a>
       <a href="{{ url_for('data_tools') }}" class="{{ 'active' if request.endpoint=='data_tools' }}">📥 Import / Export</a>
       <a href="{{ url_for('settings') }}" class="{{ 'active' if request.endpoint=='settings' }}">⚙️ Settings</a>
     </nav>

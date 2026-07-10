@@ -15,6 +15,8 @@
       <tr><td>Teacher</td><td>{{ student.teacher_name or '-' }}</td></tr>
       <tr><td>Phone</td><td>{{ student.phone or '-' }}</td></tr>
       <tr><td>Total Fee</td><td>Rs. {{ "%.0f"|format(student.total_fee) }}</td></tr>
+      <tr><td>Total Paid</td><td>Rs. {{ "%.0f"|format(total_paid) }}</td></tr>
+      <tr><td>Remaining Dues</td><td><b>Rs. {{ "%.0f"|format(total_due) }}</b></td></tr>
       <tr><td>Installments</td><td>{{ student.installment_count }}</td></tr>
       <tr><td>Admission Date</td><td>{{ student.admission_date }}</td></tr>
     </table>
@@ -24,16 +26,20 @@
     <div class="panel-header"><h2>Installment Schedule</h2></div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>#</th><th>Amount</th><th>Due Date</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Amount</th><th>Paid</th><th>Remaining</th><th>Due Date</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {% for p in payments %}
           <tr>
             <td>{{ p.installment_no }}</td>
-            <td>Rs. {{ "%.0f"|format(p.tuition_amount + p.id_card_fee + p.dmc_fee + p.exam_fee + p.fund_fee) }}</td>
+            <td>Rs. {{ "%.0f"|format(p.payment_total) }}</td>
+            <td>Rs. {{ "%.0f"|format(p.paid_amount) }}</td>
+            <td>Rs. {{ "%.0f"|format(p.remaining_amount) }}</td>
             <td>{{ p.due_date }}</td>
             <td>
               {% if p.paid %}
                 <span class="badge badge-green">Paid on {{ p.paid_date }}</span>
+              {% elif p.paid_amount > 0 %}
+                <span class="badge badge-orange">Partial</span>
               {% else %}
                 <span class="badge badge-red">Unpaid</span>
               {% endif %}
@@ -41,8 +47,9 @@
             <td>
               <a class="link-btn" href="{{ url_for('voucher', payment_id=p.id) }}">Slip</a>
               {% if not p.paid %}
-              <form method="POST" action="{{ url_for('mark_paid', payment_id=p.id) }}" style="display:inline;">
-                <button type="submit" class="btn-success-sm">Mark Paid</button>
+              <form method="POST" action="{{ url_for('mark_paid', payment_id=p.id) }}" class="inline-pay-form">
+                <input type="number" name="paid_amount" min="1" max="{{ '%.0f'|format(p.remaining_amount) }}" step="1" value="{{ '%.0f'|format(p.remaining_amount) }}">
+                <button type="submit" class="btn-success-sm">Record</button>
               </form>
               {% endif %}
             </td>

@@ -11,7 +11,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 
 
-def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy_label):
+def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy_label, student_total_due):
     """Draw a single voucher slip with its top-left corner at (x, y - height)."""
     top = y
     left = x
@@ -72,7 +72,11 @@ def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy
     ]
     total = (payment["tuition_amount"] + payment["id_card_fee"] + payment["dmc_fee"]
              + payment["exam_fee"] + payment["fund_fee"])
+    paid_amount = float(payment["paid_amount"] or 0)
+    remaining_amount = max(total - paid_amount, 0)
     rows.append(("6", "Total", f"{total:.0f}"))
+    rows.append(("7", "Paid Amount", f"{paid_amount:.0f}"))
+    rows.append(("8", "Remaining Dues", f"{remaining_amount:.0f}"))
 
     c.setLineWidth(0.7)
     y_cursor = table_top
@@ -100,12 +104,14 @@ def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy
 
     # Footer info
     c.setFont("Helvetica", 7.5)
-    paid_status = "PAID" if payment["paid"] else "UNPAID"
+    paid_status = "PAID" if payment["paid"] else ("PARTIAL" if paid_amount > 0 else "UNPAID")
     c.drawString(left + 4 * mm, cursor,
                  f"Installment: {payment['installment_no']} of {student['installment_count']}   "
                  f"Status: {paid_status}")
     c.drawRightString(right - 4 * mm, cursor, f"Due Date: {payment['due_date'] or '-'}")
-    cursor -= 7 * mm
+    cursor -= 4 * mm
+    c.drawString(left + 4 * mm, cursor, f"Student Remaining Dues: Rs. {student_total_due:.0f}")
+    cursor -= 6 * mm
 
     # Signature area
     c.setLineWidth(0.6)
@@ -133,7 +139,7 @@ def _draw_slip(c, x, y, width, height, payment, student, dev, college_name, copy
     )
 
 
-def build_voucher_pdf(payment, student, dev, college_name):
+def build_voucher_pdf(payment, student, dev, college_name, student_total_due=0):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     page_w, page_h = A4
@@ -143,7 +149,7 @@ def build_voucher_pdf(payment, student, dev, college_name):
     slip_h = (page_h - 3 * margin) / 2
 
     # Office copy (top)
-    _draw_slip(c, margin, page_h - margin, slip_w, slip_h, payment, student, dev, college_name, "OFFICE COPY")
+    _draw_slip(c, margin, page_h - margin, slip_w, slip_h, payment, student, dev, college_name, "OFFICE COPY", student_total_due)
     # dashed cut line
     c.setDash(3, 3)
     c.setLineWidth(0.5)
@@ -152,7 +158,7 @@ def build_voucher_pdf(payment, student, dev, college_name):
     c.setDash()
 
     # Student copy (bottom)
-    _draw_slip(c, margin, page_h - margin - slip_h - margin, slip_w, slip_h, payment, student, dev, college_name, "STUDENT COPY")
+    _draw_slip(c, margin, page_h - margin - slip_h - margin, slip_w, slip_h, payment, student, dev, college_name, "STUDENT COPY", student_total_due)
 
     c.showPage()
     c.save()

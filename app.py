@@ -35,6 +35,7 @@ def get_db():
         g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
+        ensure_payment_schema(g.db)
     return g.db
 
 
@@ -111,6 +112,7 @@ def init_db():
         """
     )
     db.commit()
+    ensure_payment_schema(db)
 
     if first_run:
         db.execute(
@@ -119,6 +121,20 @@ def init_db():
         )
         db.commit()
     db.close()
+
+
+def ensure_payment_schema(db):
+    columns = [row[1] for row in db.execute("PRAGMA table_info(payments)").fetchall()]
+    if not columns:
+        return
+    if "paid_amount" not in columns:
+        db.execute("ALTER TABLE payments ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0")
+        db.execute(
+            """UPDATE payments
+               SET paid_amount = tuition_amount + id_card_fee + dmc_fee + exam_fee + fund_fee
+               WHERE paid = 1 AND paid_amount = 0"""
+        )
+        db.commit()
 
 
 # ----------------------------------------------------------------------
@@ -193,6 +209,26 @@ def safe_filename_part(value):
     return cleaned or "student"
 
 
+PAYMENT_TOTAL_SQL = "(tuition_amount + id_card_fee + dmc_fee + exam_fee + fund_fee)"
+PAYMENT_REMAINING_SQL = f"MAX({PAYMENT_TOTAL_SQL} - COALESCE(paid_amount, 0), 0)"
+PAYMENT_TOTAL_P_SQL = "(p.tuition_amount + p.id_card_fee + p.dmc_fee + p.exam_fee + p.fund_fee)"
+PAYMENT_REMAINING_P_SQL = f"MAX({PAYMENT_TOTAL_P_SQL} - COALESCE(p.paid_amount, 0), 0)"
+
+
+def payment_total(payment):
+    return (
+        float(payment["tuition_amount"] or 0)
+        + float(payment["id_card_fee"] or 0)
+        + float(payment["dmc_fee"] or 0)
+        + float(payment["exam_fee"] or 0)
+        + float(payment["fund_fee"] or 0)
+    )
+
+
+def payment_remaining(payment):
+    return max(payment_total(payment) - float(payment["paid_amount"] or 0), 0)
+
+
 def create_payments_for_student(db, student_id, total_fee, installment_count, course, admission_date_str):
     installment_amount = round(total_fee / installment_count, 2)
     try:
@@ -217,14 +253,14 @@ def create_payments_for_student(db, student_id, total_fee, installment_count, co
 
 def rebuild_unpaid_payments_for_student(db, student_id, total_fee, installment_count, course, admission_date_str):
     paid_rows = db.execute(
-        "SELECT installment_no FROM payments WHERE student_id = ? AND paid = 1",
+        "SELECT installment_no FROM payments WHERE student_id = ? AND (paid = 1 OR paid_amount > 0)",
         (student_id,),
     ).fetchall()
     paid_installments = {row["installment_no"] for row in paid_rows}
     if paid_installments:
         installment_count = max(installment_count, max(paid_installments))
 
-    db.execute("DELETE FROM payments WHERE student_id = ? AND paid = 0", (student_id,))
+    db.execute("DELETE FROM payments WHERE student_id = ? AND paid = 0 AND paid_amount = 0", (student_id,))
 
     installment_amount = round(total_fee / installment_count, 2)
     try:
@@ -261,21 +297,21 @@ def dashboard():
     total_courses = db.execute("SELECT COUNT(*) c FROM courses").fetchone()["c"]
 
     collected = db.execute(
-        """SELECT COALESCE(SUM(tuition_amount + id_card_fee + dmc_fee + exam_fee + fund_fee), 0) s
-           FROM payments WHERE paid = 1"""
+        "SELECT COALESCE(SUM(paid_amount), 0) s FROM payments"
     ).fetchone()["s"]
     pending = db.execute(
-        """SELECT COALESCE(SUM(tuition_amount + id_card_fee + dmc_fee + exam_fee + fund_fee), 0) s
-           FROM payments WHERE paid = 0"""
+        f"SELECT COALESCE(SUM({PAYMENT_REMAINING_SQL}), 0) s FROM payments"
     ).fetchone()["s"]
 
     dues = db.execute(
-        """SELECT p.*, s.name AS student_name, s.candidate_no, s.phone,
-                  c.name AS course_name
+        f"""SELECT p.*, s.name AS student_name, s.candidate_no, s.phone,
+                  c.name AS course_name,
+                  {PAYMENT_TOTAL_P_SQL} AS payment_total,
+                  {PAYMENT_REMAINING_P_SQL} AS remaining_amount
            FROM payments p
            JOIN students s ON s.id = p.student_id
            LEFT JOIN courses c ON c.id = s.course_id
-           WHERE p.paid = 0
+           WHERE {PAYMENT_REMAINING_P_SQL} > 0
            ORDER BY p.due_date ASC
            LIMIT 25"""
     ).fetchall()
@@ -325,7 +361,12 @@ def teachers():
         return redirect(url_for("teachers"))
 
     rows = db.execute(
-        """SELECT t.*, (SELECT COUNT(*) FROM courses c WHERE c.teacher_id = t.id) AS course_count
+        f"""SELECT t.*,
+                  (SELECT COUNT(*) FROM courses c WHERE c.teacher_id = t.id) AS course_count,
+                  (SELECT COALESCE(SUM({PAYMENT_REMAINING_P_SQL}), 0)
+                   FROM payments p
+                   JOIN students s ON s.id = p.student_id
+                   WHERE s.teacher_id = t.id) AS dues_amount
            FROM teachers t ORDER BY t.name"""
     ).fetchall()
     return render_template("teachers.html", teachers=rows, dev=dev_context())
@@ -365,6 +406,36 @@ def edit_teacher(teacher_id):
             return redirect(url_for("teachers"))
 
     return render_template("teacher_edit.html", teacher=teacher, dev=dev_context())
+
+
+@app.route("/teachers/<int:teacher_id>/dues")
+@login_required
+def teacher_dues(teacher_id):
+    db = get_db()
+    teacher = db.execute("SELECT * FROM teachers WHERE id = ?", (teacher_id,)).fetchone()
+    if not teacher:
+        abort(404)
+
+    dues = db.execute(
+        f"""SELECT p.*, s.name AS student_name, s.candidate_no, s.phone,
+                  c.name AS course_name,
+                  {PAYMENT_TOTAL_P_SQL} AS payment_total,
+                  {PAYMENT_REMAINING_P_SQL} AS remaining_amount
+           FROM payments p
+           JOIN students s ON s.id = p.student_id
+           LEFT JOIN courses c ON c.id = s.course_id
+           WHERE s.teacher_id = ? AND {PAYMENT_REMAINING_P_SQL} > 0
+           ORDER BY s.name, p.installment_no""",
+        (teacher_id,),
+    ).fetchall()
+    total_dues = sum(float(row["remaining_amount"] or 0) for row in dues)
+    return render_template(
+        "teacher_dues.html",
+        teacher=teacher,
+        dues=dues,
+        total_dues=total_dues,
+        dev=dev_context(),
+    )
 
 
 # ----------------------------------------------------------------------
@@ -491,8 +562,11 @@ def students():
         return redirect(url_for("view_student", student_id=student_id))
 
     rows = db.execute(
-        """SELECT s.*, c.name AS course_name, t.name AS teacher_name,
-                  (SELECT COUNT(*) FROM payments p WHERE p.student_id = s.id AND p.paid = 0) AS pending_installments
+        f"""SELECT s.*, c.name AS course_name, t.name AS teacher_name,
+                  (SELECT COUNT(*) FROM payments p
+                   WHERE p.student_id = s.id AND {PAYMENT_REMAINING_P_SQL} > 0) AS pending_installments,
+                  (SELECT COALESCE(SUM({PAYMENT_REMAINING_P_SQL}), 0) FROM payments p
+                   WHERE p.student_id = s.id) AS dues_amount
            FROM students s
            LEFT JOIN courses c ON c.id = s.course_id
            LEFT JOIN teachers t ON t.id = s.teacher_id
@@ -521,9 +595,24 @@ def view_student(student_id):
     if not student:
         abort(404)
     payments = db.execute(
-        "SELECT * FROM payments WHERE student_id = ? ORDER BY installment_no", (student_id,)
+        f"""SELECT *,
+                  {PAYMENT_TOTAL_P_SQL} AS payment_total,
+                  {PAYMENT_REMAINING_P_SQL} AS remaining_amount
+           FROM payments p
+           WHERE student_id = ?
+           ORDER BY installment_no""",
+        (student_id,),
     ).fetchall()
-    return render_template("student_view.html", student=student, payments=payments, dev=dev_context())
+    total_paid = sum(float(p["paid_amount"] or 0) for p in payments)
+    total_due = sum(float(p["remaining_amount"] or 0) for p in payments)
+    return render_template(
+        "student_view.html",
+        student=student,
+        payments=payments,
+        total_paid=total_paid,
+        total_due=total_due,
+        dev=dev_context(),
+    )
 
 
 @app.route("/students/delete/<int:student_id>", methods=["POST"])
@@ -567,7 +656,7 @@ def edit_student(student_id):
         )
 
         paid_max = db.execute(
-            "SELECT MAX(installment_no) AS max_paid FROM payments WHERE student_id = ? AND paid = 1",
+            "SELECT MAX(installment_no) AS max_paid FROM payments WHERE student_id = ? AND (paid = 1 OR paid_amount > 0)",
             (student_id,),
         ).fetchone()["max_paid"]
         if paid_max and installment_count < paid_max:
@@ -614,20 +703,46 @@ def mark_paid(payment_id):
     payment = db.execute("SELECT * FROM payments WHERE id = ?", (payment_id,)).fetchone()
     if not payment:
         abort(404)
+    total = payment_total(payment)
+    current_paid = float(payment["paid_amount"] or 0)
+    remaining = max(total - current_paid, 0)
+    requested_amount = request.form.get("paid_amount")
+    try:
+        amount = float(requested_amount) if requested_amount else remaining
+    except ValueError:
+        flash("Please enter a valid payment amount.", "error")
+        return redirect(request.referrer or url_for("voucher", payment_id=payment_id))
+
+    if amount <= 0:
+        flash("Payment amount must be greater than zero.", "error")
+        return redirect(request.referrer or url_for("voucher", payment_id=payment_id))
+
+    new_paid_amount = min(current_paid + amount, total)
+    is_paid = 1 if new_paid_amount >= total else 0
     db.execute(
-        "UPDATE payments SET paid = 1, paid_date = ? WHERE id = ?",
-        (date.today().isoformat(), payment_id),
+        "UPDATE payments SET paid_amount = ?, paid = ?, paid_date = ? WHERE id = ?",
+        (new_paid_amount, is_paid, date.today().isoformat(), payment_id),
     )
     db.commit()
-    flash("Installment marked as paid.", "success")
-    return redirect(url_for("voucher", payment_id=payment_id))
+    if is_paid:
+        flash("Installment fully paid.", "success")
+    else:
+        flash(f"Partial payment saved. Remaining: Rs. {total - new_paid_amount:.0f}", "success")
+    return redirect(request.referrer or url_for("voucher", payment_id=payment_id))
 
 
 # ----------------------------------------------------------------------
 # Voucher / Slip
 # ----------------------------------------------------------------------
 def get_voucher_data(db, payment_id):
-    payment = db.execute("SELECT * FROM payments WHERE id = ?", (payment_id,)).fetchone()
+    payment = db.execute(
+        f"""SELECT *,
+                  {PAYMENT_TOTAL_P_SQL} AS payment_total,
+                  {PAYMENT_REMAINING_P_SQL} AS remaining_amount
+           FROM payments p
+           WHERE id = ?""",
+        (payment_id,),
+    ).fetchone()
     if not payment:
         return None, None
     student = db.execute(
@@ -648,8 +763,18 @@ def voucher(payment_id):
     payment, student = get_voucher_data(db, payment_id)
     if not payment or not student:
         abort(404)
-    total = (payment["tuition_amount"] + payment["id_card_fee"] + payment["dmc_fee"]
-             + payment["exam_fee"] + payment["fund_fee"])
+    total = float(payment["payment_total"] or payment_total(payment))
+    paid_amount = float(payment["paid_amount"] or 0)
+    remaining_amount = float(payment["remaining_amount"] or payment_remaining(payment))
+    student_summary = db.execute(
+        f"""SELECT COALESCE(SUM(paid_amount), 0) AS total_paid,
+                  COALESCE(SUM({PAYMENT_REMAINING_P_SQL}), 0) AS total_due
+           FROM payments p
+           WHERE student_id = ?""",
+        (student["id"],),
+    ).fetchone()
+    student_total_paid = float(student_summary["total_paid"] or 0)
+    student_total_due = float(student_summary["total_due"] or 0)
     wa_number = format_pk_whatsapp(student["phone"])
     wa_message = (
         f"Fee Voucher - {COLLEGE_NAME}\n"
@@ -657,6 +782,9 @@ def voucher(payment_id):
         f"Candidate No: {student['candidate_no'] or '-'}\n"
         f"Installment: {payment['installment_no']} of {student['installment_count']}\n"
         f"Amount: PKR {total:.0f}\n"
+        f"Paid on this installment: PKR {paid_amount:.0f}\n"
+        f"Remaining on this installment: PKR {remaining_amount:.0f}\n"
+        f"Student total remaining dues: PKR {student_total_due:.0f}\n"
         f"Due Date: {payment['due_date']}\n"
         f"Please find the attached fee voucher PDF."
     )
@@ -665,6 +793,10 @@ def voucher(payment_id):
         payment=payment,
         student=student,
         total=total,
+        paid_amount=paid_amount,
+        remaining_amount=remaining_amount,
+        student_total_paid=student_total_paid,
+        student_total_due=student_total_due,
         wa_number=wa_number,
         wa_message=wa_message,
         today=date.today().strftime("%d/%m/%Y"),
@@ -682,7 +814,20 @@ def voucher_pdf(payment_id):
     if not payment or not student:
         abort(404)
 
-    buffer = build_voucher_pdf(payment, student, dev_context(), COLLEGE_NAME)
+    student_summary = db.execute(
+        f"""SELECT COALESCE(SUM(paid_amount), 0) AS total_paid,
+                  COALESCE(SUM({PAYMENT_REMAINING_P_SQL}), 0) AS total_due
+           FROM payments p
+           WHERE student_id = ?""",
+        (student["id"],),
+    ).fetchone()
+    buffer = build_voucher_pdf(
+        payment,
+        student,
+        dev_context(),
+        COLLEGE_NAME,
+        float(student_summary["total_due"] or 0),
+    )
     student_name = safe_filename_part(student["name"])
     candidate_no = safe_filename_part(student["candidate_no"] or student["id"])
     filename = f"Voucher_{student_name}_{candidate_no}_Inst{payment['installment_no']}.pdf"
@@ -780,15 +925,19 @@ def export_excel():
     # Payments / Dues sheet
     ws = wb.create_sheet("Payments")
     ws.append(["id", "student_id", "student_name", "installment_no", "tuition_amount",
-               "id_card_fee", "dmc_fee", "exam_fee", "fund_fee", "due_date", "paid", "paid_date"])
+               "id_card_fee", "dmc_fee", "exam_fee", "fund_fee", "paid_amount",
+               "remaining_amount", "due_date", "paid", "paid_date"])
     for p in db.execute(
-        """SELECT p.*, s.name AS student_name FROM payments p
+        f"""SELECT p.*, s.name AS student_name,
+                  {PAYMENT_REMAINING_P_SQL} AS remaining_amount
+           FROM payments p
            JOIN students s ON s.id = p.student_id ORDER BY p.student_id, p.installment_no"""
     ).fetchall():
         ws.append([p["id"], p["student_id"], p["student_name"], p["installment_no"],
                    p["tuition_amount"], p["id_card_fee"], p["dmc_fee"], p["exam_fee"],
-                   p["fund_fee"], p["due_date"], "Yes" if p["paid"] else "No", p["paid_date"]])
-    style_header(ws, 12)
+                   p["fund_fee"], p["paid_amount"], p["remaining_amount"], p["due_date"],
+                   "Yes" if p["paid"] else "No", p["paid_date"]])
+    style_header(ws, 14)
 
     for sheet in wb.worksheets:
         for col_cells in sheet.columns:

@@ -53,7 +53,7 @@
     <div class="table-wrap">
       <table class="data-table">
         <thead>
-          <tr><th>Student</th><th>Course</th><th>Installment</th><th>Due Date</th><th>Amount</th><th></th></tr>
+          <tr><th>Student</th><th>Course</th><th>Installment</th><th>Due Date</th><th>Paid</th><th>Remaining</th><th></th></tr>
         </thead>
         <tbody>
           {% for d in dues %}
@@ -62,11 +62,12 @@
             <td>{{ d.course_name or '-' }}</td>
             <td>{{ d.installment_no }}</td>
             <td>{{ d.due_date }} {% if d.due_date < today %}<span class="badge badge-red">Overdue</span>{% endif %}</td>
-            <td>Rs. {{ "%.0f"|format(d.tuition_amount + d.id_card_fee + d.dmc_fee + d.exam_fee + d.fund_fee) }}</td>
+            <td>Rs. {{ "%.0f"|format(d.paid_amount) }}</td>
+            <td>Rs. {{ "%.0f"|format(d.remaining_amount) }}</td>
             <td><a class="link-btn" href="{{ url_for('voucher', payment_id=d.id) }}">View Slip</a></td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="muted">No pending dues 🎉</td></tr>
+          <tr><td colspan="7" class="muted">No pending dues 🎉</td></tr>
           {% endfor %}
         </tbody>
       </table>
